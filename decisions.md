@@ -160,3 +160,11 @@ Status values: **Decided**, **Open** (needs an answer), **Default** (chosen by C
 ## D35. `/v1/usage` is scoped to the calling key: **Default** (Phase 4)
 - **Why:** With several keys, one caller should not see another's activity. Returns newest first, `limit` 1-200 (default 50).
 - **Alternative:** A separate admin credential that can see everything (not built; the spec says to keep admin APIs out).
+
+## D36. Demo runs in-process, not against a live server: **Default** (Phase 5)
+- **Behaviour:** `scripts/demo.py` builds a fresh app per scenario (in-memory database, explicit settings that ignore the caller's environment) and drives it with FastAPI's test client. `--real` adds one live Anthropic request.
+- **Why:** Some scenarios need a different server configuration (unsafe output, provider failure, a low rate limit). In-process means one command reproduces everything with no setup and no credentials, and is repeatable.
+- **Alternative:** A script that calls a running server over HTTP (closer to a real client, but needs several server restarts or extra test-only endpoints).
+
+## D37. Documentation scope: **Default** (Phase 5)
+- README documents only what is built and states limitations plainly (see its Limitations section). No performance numbers are claimed because nothing was load-tested. No Dockerfile (D7). The resume bullet in the spec is accurate for the implemented features.

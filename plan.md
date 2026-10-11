@@ -6,6 +6,25 @@
 
 ---
 
+## Status: all five phases implemented
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1 Skeleton and mock path | done | |
+| 2 Aliases, real provider, timeouts | done | Anthropic adapter (D1, D16-D20) |
+| 3 Guardrails | done | D21-D27 |
+| 4 Auth, rate limit, usage | done | D28-D35 |
+| 5 Polish and demo | done | README, demo script, `.env.example`; D36-D37 |
+
+**Where the implementation differs from this plan** (reasons in `decisions.md`):
+- The lifecycle table's order (auth, validation, rate limit) matches the code (D30). One nuance: size checks happen in two places (header check in middleware, per-message checks in the service; D25).
+- Unauthenticated requests are logged (`auth_failed`) but not stored in the database, and requests rejected by the `Content-Length` check are not stored either (D32).
+- Estimated cost stays null unless `PRICING_JSON` and token counts are both available (D34).
+- `model_configs` table was never created; aliases live in settings (D10).
+- Tests live in `tests/unit`, `tests/api`, `tests/live`; the demo runs in-process (D36).
+
+---
+
 ## 1. Goal and guiding principles
 
 Build one small FastAPI service that accepts chat requests, applies input guardrails, calls a configured LLM provider, applies output guardrails, records safe usage metadata, and returns a normalized response.
