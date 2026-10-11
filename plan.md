@@ -2,7 +2,7 @@
 
 - Requirements source: `product-spec-mvp.md`
 - **Design decisions, rationale and alternatives: `decisions.md`.** Check it before changing any approach below. New decisions made while building get appended there.
-- Status of the real LLM vendor: **open** (decision D1). Everything except the Phase 2 adapter is vendor-independent.
+- Real LLM vendor: **Anthropic** (decision D1, a default Claude picked; changeable).
 
 ---
 
@@ -368,6 +368,5 @@ Mock path → one real provider → guardrails with tests → auth + safe errors
 
 ## 11. Open items
 
-- **D1: real provider vendor** (needed before Phase 2's adapter).
 - Rate-limit algorithm (sliding vs fixed window) and exact HTTP codes for blocks: to be recorded in `decisions.md` when implemented.
 - Whether `/docs` should require a key: default open for local demos.

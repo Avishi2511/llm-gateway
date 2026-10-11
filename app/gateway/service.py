@@ -1,5 +1,7 @@
+import asyncio
+
 from app.config import Settings
-from app.errors import ProviderUpstreamError, UnsupportedFeatureError
+from app.errors import ProviderTimeoutError, ProviderUpstreamError, UnsupportedFeatureError
 from app.gateway.aliases import resolve_alias
 from app.providers.base import Provider
 from app.schemas import AssistantMessage, ChatRequest, ChatResponse, Usage
@@ -35,13 +37,21 @@ class GatewayService:
         if max_tokens is None or max_tokens > cap:
             max_tokens = cap
 
-        result = await provider.complete(
-            messages=req.messages,
-            model=resolved.provider_model,
-            temperature=req.temperature,
-            max_tokens=max_tokens,
-            timeout_s=self.settings.provider_timeout_seconds,
-        )
+        timeout = self.settings.provider_timeout_seconds
+        try:
+            # Wall-clock backstop on top of any SDK-level timeout.
+            result = await asyncio.wait_for(
+                provider.complete(
+                    messages=req.messages,
+                    model=resolved.provider_model,
+                    temperature=req.temperature,
+                    max_tokens=max_tokens,
+                    timeout_s=timeout,
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise ProviderTimeoutError() from None
 
         total = (
             result.input_tokens + result.output_tokens

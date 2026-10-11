@@ -7,10 +7,11 @@ Status values: **Decided**, **Open** (needs an answer), **Default** (chosen by C
 
 ---
 
-## D1. Real LLM provider: **Open**
+## D1. Real LLM provider: Anthropic: **Default** (chosen by Claude in Phase 2; user had not picked)
 - **Context:** The spec requires one real provider adapter plus a mock.
 - **Options:** Anthropic (Claude), OpenAI, Google Gemini.
-- **Decision:** Pending user choice.
+- **Decision:** Anthropic via the official `anthropic` SDK. User did not answer, so I used my earlier recommendation to avoid blocking Phase 2.
+- **Default model:** `claude-opus-5-5` (`ANTHROPIC_DEFAULT_MODEL`), the SDK-skill default. Cheaper options: `claude-sonnet-5-5`, `claude-haiku-5-5`, just a config change.
 - **Impact if changed later:** Only `providers/<vendor>.py`, the env var name, and token-usage field mapping change. The provider interface isolates the rest of the code.
 
 ## D2. Database: SQLite via SQLAlchemy: **Decided**
@@ -75,3 +76,22 @@ Status values: **Decided**, **Open** (needs an answer), **Default** (chosen by C
 ## D15. Request ID generated in middleware: **Default** (Phase 1)
 - **Why:** The ID exists before validation or auth runs, so every error response, including validation and 404s, carries the same `request_id` as the `X-Request-ID` header.
 - **Alternative:** Generate per route (would miss errors raised before the route).
+
+## D16. Anthropic adapter rejects `temperature`: **Default** (Phase 2)
+- **Why:** The installed SDK (1.13) has no `temperature` parameter, and current Claude models reject non-default sampling values. The spec says unsupported features must be rejected, not silently ignored, so the adapter raises `UNSUPPORTED_FEATURE` (400) before calling the API. The mock provider still accepts it.
+- **Alternatives:** Silently drop it (violates spec); send via `extra_body` for older models that accept it (model-specific logic).
+
+## D17. `provider_mode=real` derives the default alias: **Default** (Phase 2)
+- **Behaviour:** If `MODEL_ALIASES` is not set explicitly, real mode maps `default` to `anthropic` / `ANTHROPIC_DEFAULT_MODEL`. The Anthropic adapter is built only if an enabled alias uses it, and then requires `ANTHROPIC_API_KEY` (fails at startup otherwise).
+- **Alternatives:** Always require explicit `MODEL_ALIASES`.
+
+## D18. Wall-clock timeout in the service, plus SDK timeout: **Default** (Phase 2)
+- **Why:** `asyncio.wait_for` guarantees the limit for any provider, including ones with no timeout of their own. The SDK timeout is also set so connections are released.
+
+## D19. Effort set to `low` by default; refusal fallbacks not enabled: **Default** (Phase 2)
+- **Effort:** `claude-opus-5-5` always thinks, and thinking tokens count against `max_tokens` (capped at 1024 here), so `low` avoids empty replies. `ANTHROPIC_EFFORT` is configurable; leave it empty for models without effort support.
+- **Refusal fallbacks:** The API offers an opt-in server-side fallback for safety refusals. Not enabled, to keep the MVP small; a refusal surfaces as `finish_reason: "refusal"`. Can be added in the adapter via the beta client.
+- **Retries:** `PROVIDER_MAX_RETRIES` (0 or 1, default 0) is passed to the SDK, which retries only transient errors.
+
+## D20. System messages sent via Anthropic's `system` parameter: **Default** (Phase 2)
+- **Why:** The Anthropic API takes system prompts as a separate field. All `system` messages are joined in order; messages must then start with a `user` message, otherwise the adapter returns `INVALID_REQUEST`.
