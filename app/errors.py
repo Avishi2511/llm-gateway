@@ -1,0 +1,42 @@
+"""Gateway error hierarchy. Messages are fixed strings: never include user content,
+matched values, SDK text or credentials."""
+
+
+class GatewayError(Exception):
+    code = "INTERNAL_ERROR"
+    status_code = 500
+    message = "An internal error occurred."
+
+    def __init__(self, message: str | None = None):
+        super().__init__(message or self.message)
+        self.public_message = message or self.message
+
+
+class InvalidRequestError(GatewayError):
+    code = "INVALID_REQUEST"
+    status_code = 422
+    message = "The request is invalid."
+
+
+class UnsupportedFeatureError(GatewayError):
+    code = "UNSUPPORTED_FEATURE"
+    status_code = 400
+    message = "The request uses a feature that is not supported."
+
+
+class UnknownModelError(GatewayError):
+    code = "UNKNOWN_MODEL"
+    status_code = 400
+    message = "The requested model alias is not available."
+
+
+class ProviderUpstreamError(GatewayError):
+    code = "PROVIDER_ERROR"
+    status_code = 502
+    message = "The model provider failed to complete the request."
+
+
+class ProviderTimeoutError(GatewayError):
+    code = "PROVIDER_TIMEOUT"
+    status_code = 504
+    message = "The model provider timed out."
