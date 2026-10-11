@@ -40,6 +40,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
         request.state.request_id = _new_request_id()
+        # Cheap early rejection via Content-Length; per-message limits are enforced in the service
+        # for clients that send no Content-Length (e.g. chunked uploads).
+        declared = request.headers.get("content-length")
+        if declared and declared.isdigit() and int(declared) > settings.max_request_bytes:
+            return _error(request, "REQUEST_TOO_LARGE", "The request exceeds the maximum allowed size.", 413)
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
         return response

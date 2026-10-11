@@ -40,3 +40,21 @@ class ProviderTimeoutError(GatewayError):
     code = "PROVIDER_TIMEOUT"
     status_code = 504
     message = "The model provider timed out."
+
+
+class RequestTooLargeError(GatewayError):
+    code = "REQUEST_TOO_LARGE"
+    status_code = 413
+    message = "The request exceeds the maximum allowed size."
+
+
+class InputBlockedError(GatewayError):
+    code = "INPUT_BLOCKED"
+    status_code = 400
+    message = "The request was blocked by the configured policy."
+
+
+class OutputBlockedError(GatewayError):
+    code = "OUTPUT_BLOCKED"
+    status_code = 502
+    message = "The generated response was blocked by the configured policy."

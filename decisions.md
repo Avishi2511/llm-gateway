@@ -95,3 +95,32 @@ Status values: **Decided**, **Open** (needs an answer), **Default** (chosen by C
 
 ## D20. System messages sent via Anthropic's `system` parameter: **Default** (Phase 2)
 - **Why:** The Anthropic API takes system prompts as a separate field. All `system` messages are joined in order; messages must then start with a `user` message, otherwise the adapter returns `INVALID_REQUEST`.
+
+## D21. Guardrail order and short-circuit: **Default** (Phase 3)
+- **Behaviour:** injection patterns → custom prohibited patterns → PII. A block returns immediately and records only that check id; redaction never runs on blocked input, so no partial findings are recorded for it.
+- **Alternatives:** Run all checks and report every finding (more informative, but more detail about blocked content).
+
+## D22. Which roles are scanned: **Default** (Phase 3)
+- **Behaviour:** Injection patterns scan `user` and `assistant` messages, not the caller's `system` messages. Custom prohibited patterns and PII redaction scan every role.
+- **Why:** Callers legitimately write instructions in system messages, but anything a caller sends is untrusted for PII purposes.
+- **Alternative:** Scan all roles for injection too (more false positives on legitimate system prompts).
+
+## D23. Phone detection requires separators or a leading `+`: **Default** (Phase 3)
+- **Behaviour:** Matches `(555) 010-0100`, `555-010-0100`, `555.010.0100`, `+1 ...`, and `+`-prefixed international numbers with 8-15 digits. A bare run of digits (`5550100100`) is not matched.
+- **Why:** Avoids redacting order numbers, IDs and timestamps. Known false negative, covered by a test.
+- **Alternative:** Match any 10-digit run (higher recall, more false positives).
+
+## D24. Injection patterns are a short high-confidence list: **Decided by spec** (Phase 3)
+- Three pattern groups (ignore/override instructions, reveal system prompt, jailbreak persona) in `app/guardrails/patterns.py`. Known false positives and negatives are documented in `tests/corpus/samples.py` and asserted in tests so the limits stay visible. Do not claim complete detection.
+
+## D25. Request size enforcement: **Default** (Phase 3)
+- **Behaviour:** Middleware rejects bodies whose `Content-Length` exceeds `MAX_REQUEST_BYTES` (413). Per-message length and message-count limits are enforced in the service for all clients, including chunked uploads without `Content-Length`. Errors use `REQUEST_TOO_LARGE`.
+- **Limitation:** A chunked upload with no `Content-Length` is still read fully before the per-message checks run; a real deployment should also set a body limit at the reverse proxy.
+- **Alternative:** Stream-count bytes in a pure ASGI middleware (more code).
+
+## D26. Output block is HTTP 502 `OUTPUT_BLOCKED`; input block is 400 `INPUT_BLOCKED`: **Default** (Phase 3)
+- **Why:** An input block is the caller's request being rejected; an output block is the upstream response being rejected.
+- **Alternative:** 403 for both.
+
+## D27. Canary is configurable and case-insensitive: **Default** (Phase 3)
+- `OUTPUT_CANARY` (default `CANARY-SECRET-0000`; empty disables it) plus regexes in `OUTPUT_BLOCK_PATTERNS`. The mock's `unsafe` behaviour emits the configured canary so the demo works with any value. Invalid regexes fail at startup.

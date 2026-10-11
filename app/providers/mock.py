@@ -2,8 +2,7 @@ from app.errors import ProviderTimeoutError, ProviderUpstreamError
 from app.providers.base import ProviderResult
 from app.schemas import Message
 
-# Synthetic secret used to prove output guardrails work (enforced from Phase 3).
-UNSAFE_CANARY = "CANARY-SECRET-0000"
+from app.config import DEFAULT_CANARY
 
 
 def _approx_tokens(char_count: int) -> int:
@@ -15,8 +14,9 @@ class MockProvider:
 
     name = "mock"
 
-    def __init__(self, behavior: str = "success"):
+    def __init__(self, behavior: str = "success", canary: str | None = DEFAULT_CANARY):
         self.behavior = behavior
+        self.canary = canary or DEFAULT_CANARY
         self.call_count = 0
         self.received: list[list[Message]] = []
 
@@ -37,7 +37,7 @@ class MockProvider:
             raise ProviderTimeoutError()
 
         if self.behavior == "unsafe":
-            content = f"Here is the secret: {UNSAFE_CANARY}"
+            content = f"Here is the secret: {self.canary}"
         else:
             last_user = next(
                 (m.content for m in reversed(messages) if m.role == "user" and isinstance(m.content, str)),

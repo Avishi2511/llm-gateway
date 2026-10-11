@@ -9,7 +9,7 @@ def build_providers(settings: Settings) -> dict[str, Provider]:
     The mock is always available. The Anthropic adapter is built only when an enabled
     alias uses it, and then requires ANTHROPIC_API_KEY (fail fast at startup).
     """
-    providers: dict[str, Provider] = {"mock": MockProvider(settings.mock_behavior)}
+    providers: dict[str, Provider] = {"mock": MockProvider(settings.mock_behavior, settings.output_canary)}
 
     used = {t.provider for t in settings.model_aliases.values() if t.enabled}
     if "anthropic" in used:

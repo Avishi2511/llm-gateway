@@ -1,8 +1,12 @@
+import re
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+DEFAULT_CANARY = "CANARY-SECRET-0000"  # synthetic secret used to prove output checking is active
 
 
 class AliasTarget(BaseModel):
@@ -25,11 +29,33 @@ class Settings(BaseSettings):
     max_output_tokens_cap: int = Field(1024, gt=0)
     log_level: str = "INFO"
 
+    # Request limits
+    max_request_bytes: int = Field(32768, gt=0)
+    max_messages: int = Field(50, gt=0)
+    max_message_chars: int = Field(8000, gt=0)
+
+    # Guardrails
+    pii_redaction_enabled: bool = True
+    injection_check_enabled: bool = True
+    extra_input_block_patterns: list[str] = Field(default_factory=list)
+    output_canary: str | None = DEFAULT_CANARY
+    output_block_patterns: list[str] = Field(default_factory=list)
+
     # Anthropic (real provider). Credentials come from the environment only.
     anthropic_api_key: SecretStr | None = None
     anthropic_default_model: str = "claude-opus-5-5"
     # Thinking depth/cost control; None omits it (needed for models without effort support).
     anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] | None = "low"
+
+    @field_validator("extra_input_block_patterns", "output_block_patterns")
+    @classmethod
+    def _patterns_compile(cls, patterns: list[str]) -> list[str]:
+        for p in patterns:
+            try:
+                re.compile(p)
+            except re.error:
+                raise ValueError("invalid regular expression in pattern list") from None
+        return patterns
 
     @model_validator(mode="after")
     def _finalize_aliases(self) -> "Settings":
