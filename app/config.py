@@ -15,6 +15,13 @@ class AliasTarget(BaseModel):
     enabled: bool = True
 
 
+class ModelPricing(BaseModel):
+    """USD per million tokens. Used only for an *estimated* cost, never for billing."""
+
+    input_per_mtok: float = Field(ge=0)
+    output_per_mtok: float = Field(ge=0)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -28,6 +35,13 @@ class Settings(BaseSettings):
     provider_max_retries: int = Field(0, ge=0, le=1)
     max_output_tokens_cap: int = Field(1024, gt=0)
     log_level: str = "INFO"
+
+    # Auth, rate limiting, persistence
+    gateway_api_keys: SecretStr = SecretStr("")  # comma-separated list of accepted keys
+    rate_limit_per_minute: int = Field(30, gt=0)
+    database_url: str = "sqlite:///./gateway.db"
+    # Optional: {"<provider model id>": {"input_per_mtok": 4.0, "output_per_mtok": 20.0}}
+    pricing_json: dict[str, ModelPricing] = Field(default_factory=dict)
 
     # Request limits
     max_request_bytes: int = Field(32768, gt=0)
@@ -46,6 +60,10 @@ class Settings(BaseSettings):
     anthropic_default_model: str = "claude-opus-5-5"
     # Thinking depth/cost control; None omits it (needed for models without effort support).
     anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] | None = "low"
+
+    @property
+    def api_keys(self) -> list[str]:
+        return [k.strip() for k in self.gateway_api_keys.get_secret_value().split(",") if k.strip()]
 
     @field_validator("extra_input_block_patterns", "output_block_patterns")
     @classmethod

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -68,3 +69,29 @@ class ErrorBody(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorBody
+
+
+class ModelInfo(BaseModel):
+    id: str
+
+
+class ModelList(BaseModel):
+    data: list[ModelInfo]
+
+
+class UsageRecord(BaseModel):
+    request_id: str
+    created_at: datetime
+    model_alias: str | None
+    status: str
+    duration_ms: int
+    input_tokens: int | None
+    output_tokens: int | None
+    estimated_cost: float | None = Field(description="Estimate in USD from configured pricing; not a billable amount.")
+    guardrail_action: str | None
+    guardrail_checks: list[str]
+    error_code: str | None
+
+
+class UsageList(BaseModel):
+    data: list[UsageRecord]

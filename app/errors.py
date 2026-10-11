@@ -10,6 +10,7 @@ class GatewayError(Exception):
     def __init__(self, message: str | None = None):
         super().__init__(message or self.message)
         self.public_message = message or self.message
+        self.headers: dict[str, str] = {}
 
 
 class InvalidRequestError(GatewayError):
@@ -58,3 +59,23 @@ class OutputBlockedError(GatewayError):
     code = "OUTPUT_BLOCKED"
     status_code = 502
     message = "The generated response was blocked by the configured policy."
+
+
+class UnauthorizedError(GatewayError):
+    code = "UNAUTHORIZED"
+    status_code = 401
+    message = "Missing or invalid API key."
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.headers = {"WWW-Authenticate": "Bearer"}
+
+
+class RateLimitedError(GatewayError):
+    code = "RATE_LIMITED"
+    status_code = 429
+    message = "Rate limit exceeded. Try again later."
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__()
+        self.headers = {"Retry-After": str(retry_after)}

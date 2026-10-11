@@ -3,3 +3,4 @@ uvicorn[standard]>=0.30
 pydantic>=2.7,<3.0
 pydantic-settings>=2.3
 anthropic>=1.13
+sqlalchemy>=2.0

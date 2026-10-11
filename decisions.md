@@ -124,3 +124,39 @@ Status values: **Decided**, **Open** (needs an answer), **Default** (chosen by C
 
 ## D27. Canary is configurable and case-insensitive: **Default** (Phase 3)
 - `OUTPUT_CANARY` (default `CANARY-SECRET-0000`; empty disables it) plus regexes in `OUTPUT_BLOCK_PATTERNS`. The mock's `unsafe` behaviour emits the configured canary so the demo works with any value. Invalid regexes fail at startup.
+
+## D28. Auth always on; no keys configured = refuse to start: **Default** (Phase 4)
+- **Behaviour:** `GATEWAY_API_KEYS` (comma-separated) is required; the app fails at startup if it is empty. Chat, `/v1/models` and `/v1/usage` need `Authorization: Bearer <key>`; `/health` and the Swagger docs are public. Missing, malformed and wrong keys all return the same 401 message.
+- **Why:** An accidentally open gateway that spends provider money is a worse failure than a startup error. There is no "auth disabled" switch.
+- **Alternatives:** An `AUTH_DISABLED` dev flag; DB-backed keys with hashing and revocation (spec stretch goal).
+
+## D29. Keys are identified by a short hash, compared in constant time: **Default** (Phase 4)
+- **Behaviour:** `key_id` = first 8 hex chars of SHA-256(key). It is the identity for rate limits and usage rows; raw keys are never logged or stored. Comparison uses `secrets.compare_digest` against every configured key without early exit.
+- **Limitation:** 8 hex chars could in theory collide between two keys (accepted for an MVP with a handful of keys).
+
+## D30. Order: auth → schema validation → rate limit → everything else: **Default** (Phase 4)
+- **Why:** Unauthenticated callers learn nothing about the schema and cannot burn a key's budget; malformed requests are not counted against the limit.
+- **Alternative:** Rate-limit before validation (stricter against abuse, but punishes honest typos).
+
+## D31. Sliding-window limiter, in memory: **Default** (Phase 4)
+- **Behaviour:** Per key, `RATE_LIMIT_PER_MINUTE` requests in any rolling 60 s window. Rejected requests are not counted. 429 carries `Retry-After`. Single-process only: restarting the app or running several workers resets or splits the budget.
+- **Alternatives:** Fixed window (simpler, allows 2x bursts at boundaries); Redis for multi-instance (spec defers).
+
+## D32. What is persisted: **Default** (Phase 4)
+- **Behaviour:** One row per *authenticated* request, including blocked, failed, rate-limited and schema-invalid ones. Columns are metadata only (see `app/db/models.py`). The model alias is stored only if it is a configured alias, so arbitrary client text never reaches the database. Check ids are stored, matched values never.
+- **Not persisted:** Unauthenticated attempts and oversized-body rejections (they happen before identity is known). They are logged as `auth_failed request_id=...` only. This deviates from plan.md, which said step-2 failures would be recorded: writing a row per anonymous request would let anyone fill the database.
+- **Limitation:** A key holder can still create rows by sending requests; the rate limiter bounds this. No retention/cleanup job.
+- **Alternatives:** Persist anonymous attempts with a null key id; add a retention policy.
+
+## D33. SQLite writes are synchronous: **Default** (Phase 4)
+- **Why:** A single small insert per request is fast, and avoids a thread hop. A failed write is logged (exception type only) and never changes the client's response.
+- **Alternative:** `asyncio.to_thread` or an async driver, relevant once the database is Postgres.
+- **Schema management:** `create_all()` at startup; no migrations yet. Changing a column on an existing `gateway.db` means deleting it or adding Alembic.
+
+## D34. Estimated cost needs explicit pricing: **Default** (Phase 4)
+- **Behaviour:** `PRICING_JSON` maps a provider model id to USD per million input/output tokens. Cost is stored only when pricing and both token counts exist; otherwise null. It is an estimate, not billing, and ignores cache pricing.
+- **Example:** `PRICING_JSON={"claude-opus-5-5": {"input_per_mtok": 4.0, "output_per_mtok": 20.0}}`
+
+## D35. `/v1/usage` is scoped to the calling key: **Default** (Phase 4)
+- **Why:** With several keys, one caller should not see another's activity. Returns newest first, `limit` 1-200 (default 50).
+- **Alternative:** A separate admin credential that can see everything (not built; the spec says to keep admin APIs out).
