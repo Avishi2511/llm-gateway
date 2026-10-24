@@ -2,13 +2,6 @@
 
 A small FastAPI gateway that routes chat requests to a configured LLM provider and applies **input and output guardrails** before returning a response. Client applications call one endpoint and get consistent validation, PII redaction, prompt-injection screening, output checking, authentication, rate limiting and usage history, whichever provider sits behind it.
 
-```
-Client ──► [auth] ─► [validate] ─► [rate limit] ─► [alias] ─► [input guardrails] ─► Provider (mock | Anthropic)
-                                                                    │ block: provider never called          │
-Client ◄── safe response ◄── [usage row written] ◄── [output guardrails] ◄───────────────────────────────┘
-                                                          │ block: output discarded, never returned
-```
-
 ## What it demonstrates
 
 - **One endpoint, many providers:** `POST /v1/chat/completions` behind a small provider interface. A deterministic **mock** provider (no credentials, used by all tests) and a real **Anthropic** adapter.
@@ -161,23 +154,66 @@ Every response, including errors, carries an `X-Request-ID` header matching the 
 
 ```mermaid
 flowchart TD
-    C[Client] --> AUTH[API-key check]
-    AUTH -->|invalid| E401[401, nothing stored]
-    AUTH --> VAL[Schema validation + size limits]
-    VAL --> RL[Per-key rate limit]
-    RL -->|over limit| E429[429 + Retry-After]
-    RL --> ALIAS[Resolve model alias]
-    ALIAS --> IN[Input guardrails]
-    IN -->|block| E400[INPUT_BLOCKED, provider NOT called]
-    IN -->|allow / redact| PROV[Provider interface]
-    PROV --> MOCK[Mock provider]
-    PROV --> REAL[Anthropic adapter]
-    MOCK --> OUT[Output guardrails]
+    C([Client<br/>POST /v1/chat]) --> AUTH
+
+    subgraph EDGE["1 · Edge checks (before any work)"]
+        direction TB
+        AUTH{API key<br/>valid?}
+        VAL[Schema validation<br/>+ size limits]
+        RL{Under per-key<br/>rate limit?}
+        ALIAS[Resolve model alias]
+        AUTH -->|yes| VAL --> RL
+        RL -->|yes| ALIAS
+    end
+
+    subgraph IN["2 · Input guardrails"]
+        direction TB
+        INJ{Injection or<br/>custom pattern?}
+        PII[PII scan: email, phone<br/>redact before provider]
+        INJ -->|no| PII
+    end
+
+    subgraph PROVIDER["3 · Provider"]
+        direction LR
+        PI[Provider interface]
+        MOCK[Mock provider]
+        REAL[Anthropic adapter]
+        PI --> MOCK
+        PI --> REAL
+    end
+
+    subgraph OUTG["4 · Output guardrails"]
+        OUT{Canary or block<br/>pattern found?}
+    end
+
+    ALIAS --> INJ
+    PII --> PI
+    MOCK --> OUT
     REAL --> OUT
-    OUT -->|block| E502[OUTPUT_BLOCKED, output discarded]
-    OUT -->|allow| RESP[Normalized response]
-    AUTH -. authenticated requests .-> DB[(SQLite usage rows, metadata only)]
+    OUT -->|no| OK([200 normalized response])
+
+    AUTH -->|no| E401([401 UNAUTHORIZED<br/>nothing stored])
+    RL -->|no| E429([429 RATE_LIMITED<br/>+ Retry-After])
+    INJ -->|yes| E400([400 INPUT_BLOCKED<br/>provider NOT called])
+    PI -.->|upstream failure / timeout| E50x([502 / 504<br/>PROVIDER_ERROR / TIMEOUT])
+    OUT -->|yes| E502([502 OUTPUT_BLOCKED<br/>output discarded])
+
+    OK -.-> DB
+    E429 -.-> DB
+    E400 -.-> DB
+    E50x -.-> DB
+    E502 -.-> DB
+    DB[(SQLite usage row<br/>metadata only: no prompts<br/>or completions)]
+
+    classDef ok fill:#d4edda,stroke:#28a745,color:#000
+    classDef err fill:#f8d7da,stroke:#dc3545,color:#000
+    classDef store fill:#e2e3f3,stroke:#6f42c1,color:#000
+    class OK ok
+    class E401,E429,E400,E50x,E502 err
+    class DB store
 ```
+
+Every response carries an `X-Request-ID`. Solid arrows are the request path; dashed arrows are usage logging, which applies to every authenticated request (including rejections) but never to unauthenticated ones.
 
 Orchestration lives in `app/gateway/service.py` with no FastAPI imports, so the pipeline is unit-testable without a server.
 
