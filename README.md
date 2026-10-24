@@ -2,8 +2,6 @@
 
 A small FastAPI gateway that routes chat requests to a configured LLM provider and applies **input and output guardrails** before returning a response. Client applications call one endpoint and get consistent validation, PII redaction, prompt-injection screening, output checking, authentication, rate limiting and usage history, whichever provider sits behind it.
 
-> This is a portfolio-scale MVP, not an enterprise LLM platform. See [Limitations](#limitations-and-future-work) for what it does *not* do.
-
 ```
 Client ──► [auth] ─► [validate] ─► [rate limit] ─► [alias] ─► [input guardrails] ─► Provider (mock | Anthropic)
                                                                     │ block: provider never called          │
@@ -264,16 +262,3 @@ Design choices, with reasons and alternatives, are recorded in [`decisions.md`](
 - Provider credentials and gateway keys live only in environment variables; `.env` is git-ignored. Keys are compared in constant time and identified in logs/DB by a short hash.
 - Logs record request ids, status, timing and guardrail **check ids**. Never prompts, completions, matched values or keys.
 - All test and demo data is synthetic (`example.com`, `555-01xx` numbers, a fake canary).
-
-## Limitations and future work
-
-- **Guardrails are heuristics, not guarantees.** Regex injection patterns catch obvious phrasing only: paraphrases and obfuscation get through, and quoting an attack phrase can be blocked (both documented in the test corpus). Phone detection needs separators or a leading `+`. The canary check proves the output path is active; it does not detect semantic harm or arbitrary secrets.
-- **Single instance.** The rate limiter is in memory (resets on restart, not shared across workers). Use Redis or similar for multiple instances.
-- **SQLite and no migrations:** the table is created at startup; schema changes need a new database or Alembic. There is no retention policy for old usage rows.
-- **Request size:** a body without `Content-Length` (chunked) is read before per-message limits apply. Put a body-size limit at your reverse proxy in production.
-- **Cost is an estimate** from configured prices and ignores caching.
-- **No streaming, tools or multimodal input;** one real provider and no fallback or retry beyond one optional SDK retry.
-- **Keys come from the environment;** no creation/revocation API. No admin dashboard, metrics, or tracing.
-- **No performance claims:** the project has not been load-tested.
-
-Possible next steps: database-backed key management, a second provider with fallback, Redis rate limiting, Presidio-based PII detection, a moderation/classifier adapter, streaming, Prometheus/OpenTelemetry.
